@@ -21,43 +21,36 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
     n_knowledge = n_knowledge_fine
     creator.create('FitnessMax', base.Fitness, weights=(1.0,))
     creator.create('Individual', list, fitness=creator.FitnessMax)
-    if flag_train:
-        GENE_LENGTH = n_students * n_knowledge + n_questions * 2 * len_s_g  # 32*11+15*2*7
-    else:
-        GENE_LENGTH = n_students * n_knowledge
-
+    GENE_LENGTH = n_students * n_knowledge + n_questions * 2 * len_s_g
     toolbox = base.Toolbox()
     toolbox.register('Binary', bernoulli.rvs, 0.5)
     toolbox.register('Individual', tools.initRepeat, creator.Individual, toolbox.Binary, n=GENE_LENGTH)
     toolbox.register('Population', tools.initRepeat, list, toolbox.Individual)
+    pop = toolbox.Population(n=n_pop)  # Generate initialized populations
 
-    pop = toolbox.Population(n=n_pop)
-
-    def evaluate(individual):
-        A = acquireA(individual, n_students, n_knowledge)
-        YITA = acquireYITA(A, q_matrix, n_students, n_questions, n_knowledge)
-        slip_ratio = slip
-        guess_ratio = guess
-        if flag_train:
-            s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)  # 列表 大小为question，func79行
-            slip_ratio = s
-            guess_ratio = g
-
+    def evaluate(individual):  # Define the evaluation function
+        A = acquireA(individual, n_students, n_knowledge)  # Knowledge mastery matrix from chromosomes
+        YITA = acquireYITA(A, q_matrix, n_students, n_questions, n_knowledge)  # Obtain the matrix YITA of students' answers without considering S and G
+        # slip_ratio = slip
+        # guess_ratio = guess
+        s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)
+        slip_ratio = s
+        guess_ratio = g
         X, Xscore = acquireX(n_students, n_questions, YITA, slip_ratio, guess_ratio)
 
         sum_ = 0
         for i in range(n_students):
             for j in range(n_questions):
-                sum_ = sum_ + (1 - abs(data[i][j] - X[i][j]))  #
+                sum_ = sum_ + (1 - abs(data[i][j] - X[i][j]))  # Obtain the fitness value
 
         return (sum_),
 
     toolbox.register('evaluate', evaluate)
-    toolbox.register('select', tools.selTournament, tournsize=3)
-    toolbox.register('mate', tools.cxUniform, indpb=0.5)
-    toolbox.register('mutate', tools.mutFlipBit, indpb=0.5)
+    toolbox.register('select', tools.selTournament, tournsize=2)  # Tournament Selection
+    toolbox.register('mate', tools.cxUniform, indpb=0.5)  # Uniform crossover
+    toolbox.register('mutate', tools.mutFlipBit, indpb=0.02)  # 1-bit-flip mutation
 
-    stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+    stats = tools.Statistics(key=lambda ind: ind.fitness.values)  # Data to be recorded during the registration calculation
     stats.register("avg", np.mean)
     stats.register("std", np.std)
     stats.register("min", np.min)
@@ -75,12 +68,12 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
     record = stats.compile(pop)
     logbook.record(gen=0, nevals=len(invalid_ind), **record)
     tempTotalPop = []
-    LSmax = 100
+    LSmax = 100  # Maximum number of LS
     Nls = 0
-    LSMcm = []
-    LSMdis = []
-    LSM_bestFitness_pre = []
-    LSM_bestFitness_post = []
+    LSMcm = []  # Memory
+    LSMdis = [] # Radius of Influence
+    LSM_bestFitness_pre = []  # pre-local-search solutions
+    LSM_bestFitness_post = []  # post-local-search solutions
     for gen in range(1, max_generations + 1):
         if (gen == 1):
             totalPop = invalid_ind
@@ -103,11 +96,12 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
                     subPop.append(totalPop[nodeId])
                 except :
                     pass
-            cxpb = 0.4329
-            mutpb = 0.09351
+
+            cxpb = 0.4329  # crossover probability (Pc)
+            mutpb = 0.09351  # mutation probability (Pm)
 
             N_subPop = len(subPop)
-            ind_seed = subPop[0]  #
+            ind_seed = subPop[0]
             seed_LS = toolbox.clone(ind_seed)
             seed_LS_tem = toolbox.clone(ind_seed)
             if alg_name == 'GA_NBC' :
@@ -133,21 +127,9 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
                 if local_flag and Nls < LSmax:
                     Nls = Nls + 1
                     LSMcm.append(seed_LS_tem)
-                    if flag_train:
-                        if n_knowledge_coarse == n_knowledge_fine:
-                            seed_LS = local_search_train_0(data, seed_LS, q_matrix, n_students, n_knowledge_fine,
+                    seed_LS = local_search_train_0(data, seed_LS, q_matrix, n_students, n_knowledge_fine,
                                                            n_questions, GENE_LENGTH, len_s_g)
-                        else:
-                            seed_LS = local_search_train(data, seed_LS, q_matrix, n_students, n_knowledge_coarse,
 
-                                                         n_knowledge_fine, n_questions, GENE_LENGTH, len_s_g,
-                                                         data_name)
-                    else:
-                        if n_knowledge_coarse < n_knowledge_fine:
-                            A =1
-                        else:
-                            seed_LS = local_search_test_0(data, seed_LS, q_matrix, n_students, n_knowledge, slip,
-                                                          guess)
                     seed_LS.fitness.values = evaluate(seed_LS)
 
                     tem_distance = distance(seed_LS_tem, seed_LS)
@@ -235,8 +217,6 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
     fit_max = resultPop[index].fitness
     fit_max = fit_max.values[0]
     Accuracy = fit_max / (n_students * n_questions)
-    print(str(gen) + '  Accuracy=' + str(Accuracy) + ' 最优适应度：' + str(tempTotalPop[index].fitness))
-
 
     gen = logbook.select('gen')
     fit_maxs = logbook.select('max')
@@ -253,8 +233,8 @@ def HGA_CDM_IALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, 
     else:
         path_pre = '_results/pict/train/MaxFitness_perGen_alg'
     os.makedirs(path_pre, exist_ok=True)
-    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' 共' + str(max_generations) + '代：   第' + str(
-        data_patch_id) + '折' + '第' + str(run_id) + '次训练' + '.png')
+    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' total' + str(max_generations) + 'geb：   NO.' + str(
+        data_patch_id) + 'patch' + 'NO.' + str(run_id) + 'run' + '.png')
     return resultPop, logbook, slip, guess
 
 
@@ -284,14 +264,10 @@ def HGA_CDM_ALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, d
         A = acquireA(individual, n_students, n_knowledge)
 
         YITA = acquireYITA(A, q_matrix, n_students, n_questions, n_knowledge)
-        slip_ratio = slip
-        guess_ratio = guess
-        if flag_train:
+        s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)
 
-            s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)
-
-            slip_ratio = s
-            guess_ratio = g
+        slip_ratio = s
+        guess_ratio = g
 
         X, Xscore = acquireX(n_students, n_questions, YITA, slip_ratio, guess_ratio)
         sum_ = 0
@@ -383,21 +359,10 @@ def HGA_CDM_ALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, d
                 if LS < LSmax and local_flag:
                     LS = LS + 1
                     LSMcm.append(seed_LS_tem)
-                    if flag_train:
-                        if n_knowledge_coarse == n_knowledge_fine:
-                            seed_LS = local_search_train_0(data, seed_LS, q_matrix, n_students, n_knowledge_fine,
-                                                           n_questions, GENE_LENGTH, len_s_g)
-                        else:
-                            seed_LS = local_search_train(data, seed_LS, q_matrix, n_students, n_knowledge_coarse,
 
-                                                         n_knowledge_fine, n_questions, GENE_LENGTH, len_s_g,
-                                                         data_name)
-                    else:
-                        if n_knowledge_coarse < n_knowledge_fine:
-                            A=1
-                        else:
-                            seed_LS = local_search_test_0(data, seed_LS, q_matrix, n_students, n_knowledge, slip,
-                                                          guess)
+                    seed_LS = local_search_train_0(data, seed_LS, q_matrix, n_students, n_knowledge_fine,
+                                                           n_questions, GENE_LENGTH, len_s_g)
+
                     seed_LS.fitness.values = evaluate(seed_LS)
                     tem_distance = distance(seed_LS_tem, seed_LS)
 
@@ -463,7 +428,6 @@ def HGA_CDM_ALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, d
     def decode(resultPopx):
         if flag_train:
             resultS, resultG = acquireSandG(n_students, resultPopx, n_knowledge, GENE_LENGTH, len_s_g)
-            A = acquireA(resultPopx, n_students, n_knowledge)
 
             return resultS, resultG
         else:
@@ -478,8 +442,6 @@ def HGA_CDM_ALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, d
 
     fit_max = resultPop[index].fitness
     fit_max = fit_max.values[0]
-    Accuracy = fit_max / (n_students * n_questions)  # 准确率计算
-    print(str(gen) + '  Accuracy=' + str(Accuracy) + ' 最优适应度：' + str(tempTotalPop[index].fitness))
 
 
 
@@ -501,8 +463,8 @@ def HGA_CDM_ALS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, d
         path_pre = '_results/pict/train/MaxFitness_perGen_alg'
     os.makedirs(path_pre, exist_ok=True)
 
-    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' 共' + str(max_generations) + '代：   第' + str(
-        data_patch_id) + '折' + '第' + str(run_id) + '次训练' + '.png')
+    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' total' + str(max_generations) + 'geb：   NO.' + str(
+        data_patch_id) + 'patch' + 'NO.' + str(run_id) + 'run' + '.png')
     return resultPop, logbook, slip, guess
 
 def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, q_matrix, slip, guess, data_patch_id,
@@ -525,17 +487,10 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
     pop = toolbox.Population(n=n_pop)
     def evaluate(individual):
         A = acquireA(individual, n_students, n_knowledge)
-
         YITA = acquireYITA(A, q_matrix, n_students, n_questions, n_knowledge)
-        slip_ratio = slip
-        guess_ratio = guess
-        if flag_train:
-
-            s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)
-
-            slip_ratio = s
-            guess_ratio = g
-
+        s, g = acquireSandG(n_students, individual, n_knowledge, GENE_LENGTH, len_s_g)
+        slip_ratio = s
+        guess_ratio = g
         X, Xscore = acquireX(n_students, n_questions, YITA, slip_ratio, guess_ratio)
 
         sum_ = 0
@@ -546,9 +501,9 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
         return (sum_),
 
     toolbox.register('evaluate', evaluate)
-    toolbox.register('select', tools.selTournament, tournsize=3)
+    toolbox.register('select', tools.selTournament, tournsize=2)
     toolbox.register('mate', tools.cxUniform, indpb=0.5)
-    toolbox.register('mutate', tools.mutFlipBit, indpb=0.5)
+    toolbox.register('mutate', tools.mutFlipBit, indpb=0.02)
     stats = tools.Statistics(key=lambda ind: ind.fitness.values)
     stats.register("avg", np.mean)
     stats.register("std", np.std)
@@ -596,8 +551,6 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
                 except :
                     pass
 
-
-
             cxpb = 0.4329
             mutpb = 0.09351
 
@@ -606,25 +559,13 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
 
             seed_LS = toolbox.clone(ind_seed)
             if alg_name == 'HGA_CDM_LS':
-                if flag_train:
-                    if n_knowledge_coarse == n_knowledge_fine:
+
                         seed_LS = local_search_train_0(data, seed_LS, q_matrix, n_students, n_knowledge_fine,
                                                        n_questions, GENE_LENGTH, len_s_g)
-                    else:
-                        seed_LS = local_search_train(data, seed_LS, q_matrix, n_students, n_knowledge_coarse,
 
-                                                     n_knowledge_fine, n_questions, GENE_LENGTH, len_s_g,
-                                                     data_name)
-                else:
-                    if n_knowledge_coarse < n_knowledge_fine:
-                       A=1
-                    else:
-                        seed_LS = local_search_test_0(data, seed_LS, q_matrix, n_students, n_knowledge, slip,
-                                                      guess)
-                seed_LS.fitness.values = evaluate(seed_LS)
+                        seed_LS.fitness.values = evaluate(seed_LS)
 
 
-            # 配种选择
             offspring = toolbox.select(subPop, N_subPop)
             offspring_Xor = []
             for i in range(N_subPop):
@@ -700,11 +641,6 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
 
     fit_max = resultPop[index].fitness
     fit_max = fit_max.values[0]
-    Accuracy = fit_max / (n_students * n_questions)  # 准确率计算
-    print(str(gen) + '  Accuracy=' + str(Accuracy) + ' 最优适应度：' + str(tempTotalPop[index].fitness))
-
-
-
     gen = logbook.select('gen')
     fit_maxs = logbook.select('max')
 
@@ -722,8 +658,8 @@ def HGA_CDM_LS(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, da
         path_pre = '_results/pict/train/MaxFitness_perGen_alg'
     os.makedirs(path_pre, exist_ok=True)
 
-    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' 共' + str(max_generations) + '代：   第' + str(
-        data_patch_id) + '折' + '第' + str(run_id) + '次训练' + '.png')
+    fig.savefig(path_pre + alg_name + '_data：' + data_name + ' total' + str(max_generations) + 'geb：   NO.' + str(
+        data_patch_id) + 'patch' + 'NO.' + str(run_id) + 'run' + '.png')
     return resultPop, logbook, slip, guess
 
 def GA_CDM(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, q_matrix, slip, guess, data_patch_id,
@@ -775,10 +711,10 @@ def GA_CDM(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, 
 
     toolbox.register('evaluate', evaluate)
 
-    toolbox.register('select', tools.selTournament, tournsize=3)
+    toolbox.register('select', tools.selTournament, tournsize=2)
 
     toolbox.register('mate', tools.cxUniform, indpb=0.5)
-    toolbox.register('mutate', tools.mutFlipBit, indpb=0.5)
+    toolbox.register('mutate', tools.mutFlipBit, indpb=0.02)
 
 
     stats = tools.Statistics(key=lambda ind: ind.fitness.values)
@@ -803,9 +739,6 @@ def GA_CDM(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, 
     record = stats.compile(pop)
     logbook.record(gen=0, nevals=len(invalid_ind), **record)
     tempTotalPop = []
-    Nls = 0
-
-
     for gen in range(1, max_generations + 1):
 
 
@@ -905,8 +838,6 @@ def GA_CDM(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, 
     def decode(resultPopx):
         if flag_train:
             resultS, resultG = acquireSandG(n_students, resultPopx, n_knowledge, GENE_LENGTH, len_s_g)
-            A = acquireA(resultPopx, n_students, n_knowledge)
-
             return resultS, resultG
         else:
             A = acquireA(resultPopx, n_students, n_knowledge)
@@ -919,8 +850,6 @@ def GA_CDM(n_students, n_questions, n_knowledge_coarse, n_knowledge_fine, data, 
 
     fit_max = resultPop[index].fitness
     fit_max = fit_max.values[0]
-    Accuracy = fit_max / (n_students * n_questions)  # 准确率计算
-    print(str(gen) + '  Accuracy=' + str(Accuracy) + ' 最优适应度：' + str(tempTotalPop[index].fitness))
 
 
     gen = logbook.select('gen')
@@ -955,26 +884,6 @@ def local_search_train_0(data, individual, q_matrix, n_students, n_knowledge, n_
         individual = updateIndividual_s_g(individual, slip, guess, n_students, n_knowledge, GENE_LENGTH,
                                           len_s_g)
     return individual
-
-
-
-def local_search_train(data, individual, q_matrix, n_students, n_knowledge_coarse, n_knowledge_fine, n_questions,
-                       GENE_LENGTH, len_s_g, data_name):
-    slip, guess = acquireSandG(n_students, individual, n_knowledge_fine, GENE_LENGTH, len_s_g)
-
-
-    if not math.isnan(slip[0]) and not math.isnan(guess[0]):
-        individual = updateIndividual_s_g(individual, slip, guess, n_students, n_knowledge_fine, GENE_LENGTH, len_s_g)
-    return individual
-
-
-def local_search_test_0(data, individual, q_matrix, n_students, n_knowledge, slip, guess):
-    A, IL, k_matrix, r_matrix = EStep(slip, guess, data, q_matrix, n_knowledge, n_students)
-
-    individual = updateIndividual_A(individual, A, n_students, n_knowledge)
-    return individual
-
-
 
 
 
