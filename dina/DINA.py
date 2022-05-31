@@ -163,6 +163,9 @@ def trainAndPredict(model,dataSet,threshold):
     elif dataSet == 'Math2':
         n = pd.read_csv('math2020/Math2/data.csv').head(500).values
         Q = np.mat(pd.read_csv('math2020/Math2/q.csv'))
+    elif dataSet == 'Math2':
+        n = pd.read_csv('math2020/scores/data.csv').head(500).values
+        Q = np.mat(pd.read_csv('math2020/scores/q.csv'))
     else:
         print('dataSet not exist!')
         exit(0)
@@ -203,7 +206,7 @@ def main():
     aPrior = np.ones(2 ** 8) / 10 ** 8   #FruSub
     #aPrior = np.ones(2 ** 11) / 10 ** 8     #math1
     #aPrior = np.ones(2 ** 16) / 10 ** 8  # math2
-    dataSet = ('FrcSub', 'Math1', 'Math2', )
+    dataSet = ('FrcSub', 'Math1', 'Math2', 'scores')
     model = ('DINA')
     s1=0
     s2=0
