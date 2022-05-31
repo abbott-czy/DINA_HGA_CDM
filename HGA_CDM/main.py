@@ -165,7 +165,7 @@ if __name__ == '__main__':
     n_pop = 100  # n pop
 
     alg_names = ["HGA_CDM_IALS","HGA_CDM_ALS","HGA_CDM_LS","GA_CDM"]
-    data_names = ["FrcSub",  "Math2", "Math1"]
+    data_names = ["FrcSub",  "Math2", "Math1","scores"]
     # alg_id = 0
     # dataset_id = 0
     NumTime = 0
